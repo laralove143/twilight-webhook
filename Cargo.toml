@@ -4,7 +4,7 @@ description = "caching and utility things for discord webhooks, a third party cr
 repository = "https://github.com/laralove143/twilight-webhook"
 license = "MIT"
 keywords = ["discord", "twilight", "webhooks"]
-categories = ["asynchronous", "caching", "http-client", "websocket"]
+categories = ["asynchronous", "caching", "web-programming::http-client", "web-programming::websocket"]
 version = "0.1.0"
 edition = "2021"
 
