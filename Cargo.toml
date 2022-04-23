@@ -1,0 +1,19 @@
+[package]
+name = "twilight-webhook"
+description = "caching and utility things for discord webhooks, a third party crate of the twilight ecosystem"
+repository = "https://github.com/laralove143/twilight-webhook"
+license = "MIT"
+keywords = ["discord", "twilight", "webhooks"]
+categories = ["asynchronous", "caching", "http-client", "websocket"]
+version = "0.1.0"
+edition = "2021"
+
+[dev-dependencies]
+tokio = { version = "1.17", features = ["rt", "macros"] }
+twilight-gateway = "0.10"
+
+[dependencies]
+dashmap = "5.2"
+thiserror = "1.0"
+twilight-model = "0.10"
+twilight-http = "0.10"
