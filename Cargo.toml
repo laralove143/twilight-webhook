@@ -5,7 +5,7 @@ repository = "https://github.com/laralove143/twilight-webhook"
 license = "MIT"
 keywords = ["discord", "twilight", "webhooks"]
 categories = ["asynchronous", "caching", "web-programming::http-client", "web-programming::websocket"]
-version = "0.10.1"
+version = "0.10.2"
 edition = "2021"
 
 [dev-dependencies]
