@@ -28,7 +28,7 @@ pub enum Error {
 
 /// a struct with only the required information to execute webhooks
 ///
-/// this implements `TryFrom<Webhook>` for convenience, which might return
+/// this implements `TryFrom<&Webhook>` for convenience, which might return
 /// [`Error::NoToken`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimalWebhook<'t> {
