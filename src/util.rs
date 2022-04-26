@@ -30,20 +30,20 @@ pub enum Error {
 /// this implements `TryFrom<Webhook>` for convenience, which might return
 /// [`Error::NoToken`]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MinimalWebhook {
+pub struct MinimalWebhook<'t> {
     /// the webhook's id, required when executing it
     id: Id<WebhookMarker>,
     /// the webhook's token, required when executing it
-    token: String,
+    token: &'t str,
 }
 
-impl TryFrom<Webhook> for MinimalWebhook {
+impl<'t> TryFrom<&'t Webhook> for MinimalWebhook<'t> {
     type Error = Error;
 
-    fn try_from(webhook: Webhook) -> Result<Self, Self::Error> {
+    fn try_from(webhook: &'t Webhook) -> Result<Self, Self::Error> {
         Ok(Self {
             id: webhook.id,
-            token: webhook.token.ok_or(Error::NoToken)?,
+            token: webhook.token.as_ref().ok_or(Error::NoToken)?,
         })
     }
 }
@@ -55,18 +55,18 @@ impl TryFrom<Webhook> for MinimalWebhook {
 /// `From<Member>` implementation tries to use the member's guild nick and
 /// avatar, falling back to the user's name and avatar
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MinimalMember {
+pub struct MinimalMember<'u> {
     /// the member's nick or name
-    name: String,
+    name: &'u str,
     /// the cdn endpoint of the member's guild or user avatar, if the member has
     /// one
     avatar_url: Option<String>,
 }
 
-impl From<Member> for MinimalMember {
-    fn from(member: Member) -> Self {
+impl<'u> From<&'u Member> for MinimalMember<'u> {
+    fn from(member: &'u Member) -> Self {
         Self {
-            name: member.nick.unwrap_or(member.user.name),
+            name: member.nick.as_ref().unwrap_or(&member.user.name),
             avatar_url: member.avatar.map_or_else(
                 || {
                     Some(format!(
@@ -85,10 +85,10 @@ impl From<Member> for MinimalMember {
     }
 }
 
-impl From<User> for MinimalMember {
-    fn from(user: User) -> Self {
+impl<'u> From<&'u User> for MinimalMember<'u> {
+    fn from(user: &'u User) -> Self {
         Self {
-            name: user.name,
+            name: &user.name,
             avatar_url: user
                 .avatar
                 .map(|hash| format!("https://cdn.discordapp.com/avatars/{}/{hash}.png", user.id)),
@@ -96,7 +96,7 @@ impl From<User> for MinimalMember {
     }
 }
 
-impl MinimalWebhook {
+impl<'t> MinimalWebhook<'t> {
     /// send a webhook with the member's avatar and nick
     /// this takes the http client to return its methods, it doesn't make any
     /// requests
@@ -112,8 +112,8 @@ impl MinimalWebhook {
         member: &'a MinimalMember,
     ) -> ExecuteWebhook<'a> {
         let mut exec = http
-            .execute_webhook(self.id, &self.token)
-            .username(&member.name);
+            .execute_webhook(self.id, self.token)
+            .username(member.name);
 
         if let Some(id) = thread {
             exec = exec.thread_id(id);
@@ -195,9 +195,9 @@ mod tests {
     }
 
     #[allow(clippy::unwrap_used)]
-    fn minimal_member() -> MinimalMember {
+    fn minimal_member<'u>() -> MinimalMember<'u> {
         MinimalMember {
-            name: "nick".to_owned(),
+            name: "nick",
             avatar_url: Some(
                 "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
                 a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png"
@@ -207,9 +207,9 @@ mod tests {
     }
 
     #[allow(clippy::unwrap_used)]
-    fn minimal_member_user() -> MinimalMember {
+    fn minimal_member_user<'u>() -> MinimalMember<'u> {
         MinimalMember {
-            name: "username".to_owned(),
+            name: "username",
             avatar_url: Some(
                 "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
                     .to_owned(),
@@ -232,43 +232,40 @@ mod tests {
     fn from_member() {
         let mut member = member();
         let mut minimal_member = minimal_member();
-        assert_eq!(MinimalMember::from(member.clone()), minimal_member);
+        assert_eq!(MinimalMember::from(&member), minimal_member);
 
         member.avatar = None;
         minimal_member.avatar_url = Some(
             "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
                 .to_owned(),
         );
-        assert_eq!(MinimalMember::from(member.clone()), minimal_member);
+        assert_eq!(MinimalMember::from(&member), minimal_member);
 
         member.nick = None;
-        minimal_member.name = "username".to_owned();
-        assert_eq!(MinimalMember::from(member), minimal_member);
+        minimal_member.name = "username";
+        assert_eq!(MinimalMember::from(&member), minimal_member);
     }
 
     #[test]
     fn from_member_user() {
         let mut member_user = member_user();
         let mut minimal_member = minimal_member_user();
-        assert_eq!(
-            MinimalMember::from(member_user.clone()),
-            minimal_member_user()
-        );
+        assert_eq!(MinimalMember::from(&member_user), minimal_member_user());
 
         member_user.user.avatar = None;
         minimal_member.avatar_url = None;
-        assert_eq!(MinimalMember::from(member_user), minimal_member);
+        assert_eq!(MinimalMember::from(&member_user), minimal_member);
     }
 
     #[test]
     fn from_user() {
         let mut user = user();
         let mut minimal_member_user = minimal_member_user();
-        assert_eq!(MinimalMember::from(user.clone()), minimal_member_user);
+        assert_eq!(MinimalMember::from(&user), minimal_member_user);
 
         user.avatar = None;
         minimal_member_user.avatar_url = None;
-        assert_eq!(MinimalMember::from(user), minimal_member_user);
+        assert_eq!(MinimalMember::from(&user), minimal_member_user);
     }
 
     #[test]
@@ -276,7 +273,7 @@ mod tests {
     fn execute_as_member() {
         let webhook = MinimalWebhook {
             id: Id::new(1),
-            token: "a".to_owned(),
+            token: "a",
         };
         let http = ClientBuilder::new().build();
 
@@ -302,7 +299,7 @@ mod tests {
     fn execute_as_member_user() {
         let webhook = MinimalWebhook {
             id: Id::new(1),
-            token: "a".to_owned(),
+            token: "a",
         };
         let http = ClientBuilder::new().build();
 
