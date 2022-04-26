@@ -93,11 +93,17 @@ impl Cache {
         Ok(())
     }
 
+    /// returns the webhook for the given channel id, if it exists
+    #[must_use]
+    pub fn get(
+        &self,
+        channel_id: Id<ChannelMarker>,
+    ) -> Option<Ref<'_, Id<ChannelMarker>, Webhook>> {
+        self.0.get(&channel_id)
+    }
+
     /// replaces the webhooks from the cache with the ones returned by the http
     /// client
-    ///
-    /// you should run this on `WebhooksUpdate`, `GuildCreate` and
-    /// `ChannelCreate` events
     ///
     /// the http client is used because `WebhooksUpdate` events don't contain
     /// webhook information
@@ -108,6 +114,7 @@ impl Cache {
     ///
     /// # Errors
     /// returns an [`Error::Http`] or [`Error::Deserialize`]
+    #[deprecated(note = "use `get_or_create` to only request webhooks you actually need")]
     pub async fn update(&self, http: &Client, channel_id: Id<ChannelMarker>) -> Result<(), Error> {
         self.0.remove(&channel_id);
 
@@ -121,15 +128,6 @@ impl Cache {
             .and_then(|w| self.0.insert(channel_id, w));
 
         Ok(())
-    }
-
-    /// returns the webhook for the given channel id, if it exists
-    #[must_use]
-    pub fn get(
-        &self,
-        channel_id: Id<ChannelMarker>,
-    ) -> Option<Ref<'_, Id<ChannelMarker>, Webhook>> {
-        self.0.get(&channel_id)
     }
 }
 
