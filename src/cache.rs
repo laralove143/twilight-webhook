@@ -159,19 +159,17 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::unwrap_used)]
-    async fn update() {
+    async fn get_infallible() {
         let cache = Cache::new();
         let http = Client::new(env!("TEST_BOT_TOKEN").to_owned());
 
         assert!(cache.get(CHANNEL_ID).is_none());
-        cache.update(&http, CHANNEL_ID).await.unwrap();
-        assert!(cache.get(CHANNEL_ID).is_none());
 
-        http.create_webhook(CHANNEL_ID, "test")
-            .exec()
+        cache
+            .get_infallible(&http, CHANNEL_ID, "test")
             .await
             .unwrap();
-        cache.update(&http, CHANNEL_ID).await.unwrap();
+
         assert!(cache.get(CHANNEL_ID).is_some());
     }
 
