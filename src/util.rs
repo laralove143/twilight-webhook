@@ -1,4 +1,5 @@
 use thiserror::Error;
+use twilight_cache_inmemory::model::CachedMember;
 use twilight_http::{request::channel::webhook::ExecuteWebhook, Client};
 use twilight_model::{
     channel::Webhook,
@@ -51,8 +52,9 @@ impl<'t> TryFrom<&'t Webhook> for MinimalWebhook<'t> {
 /// a struct with only the required information to execute webhooks as
 /// members/users
 ///
-/// this implements `From<Member>` and `From<User>` for convenience, the
-/// `From<Member>` implementation tries to use the member's guild nick and
+/// this implements `From<&Member>`, `From<(&CachedMember, &User)>` and
+/// `From<&User>` for convenience, the `From<Member>` and `From<(&CachedMember,
+/// &User)>` implementations try to use the member's guild nick and
 /// avatar, falling back to the user's name and avatar
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimalMember<'u> {
@@ -78,6 +80,29 @@ impl<'u> From<&'u Member> for MinimalMember<'u> {
                     Some(format!(
                         "https://cdn.discordapp.com/guilds/{}/users/{}/avatars/{hash}.png",
                         member.guild_id, member.user.id
+                    ))
+                },
+            ),
+        }
+    }
+}
+
+impl<'u> From<(&'u CachedMember, &'u User)> for MinimalMember<'u> {
+    fn from((member, user): (&'u CachedMember, &'u User)) -> Self {
+        Self {
+            name: member.nick().unwrap_or(&user.name),
+            avatar_url: member.avatar().map_or_else(
+                || {
+                    Some(format!(
+                        "https://cdn.discordapp.com/avatars/{}/{}.png",
+                        user.id, user.avatar?
+                    ))
+                },
+                |hash| {
+                    Some(format!(
+                        "https://cdn.discordapp.com/guilds/{}/users/{}/avatars/{hash}.png",
+                        member.guild_id(),
+                        user.id
                     ))
                 },
             ),
@@ -131,11 +156,15 @@ impl<'t> MinimalWebhook<'t> {
 mod tests {
     use std::str::FromStr;
 
+    use twilight_cache_inmemory::InMemoryCache;
     use twilight_http::{
         client::ClientBuilder,
         request::{Request, TryIntoRequest},
     };
-    use twilight_model::{datetime::Timestamp, guild::Member, id::Id, user::User, util::ImageHash};
+    use twilight_model::{
+        datetime::Timestamp, gateway::payload::incoming::MemberAdd, guild::Member, id::Id,
+        user::User, util::ImageHash,
+    };
 
     use crate::util::{MinimalMember, MinimalWebhook};
 
@@ -254,6 +283,54 @@ mod tests {
 
         member_user.user.avatar = None;
         minimal_member.avatar_url = None;
+        assert_eq!(MinimalMember::from(&member_user), minimal_member);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn from_cached_member() {
+        let cache = InMemoryCache::new();
+        let mut member = member();
+        let mut minimal_member = minimal_member();
+
+        cache.update(&MemberAdd(member.clone()));
+        assert_eq!(
+            MinimalMember::from((
+                cache
+                    .member(member.guild_id, member.user.id)
+                    .unwrap()
+                    .value(),
+                &member.user
+            )),
+            minimal_member
+        );
+
+        member.avatar = None;
+        minimal_member.avatar_url = Some(
+            "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
+                .to_owned(),
+        );
+        cache.update(&MemberAdd(member.clone()));
+        assert_eq!(MinimalMember::from(&member), minimal_member);
+
+        member.nick = None;
+        minimal_member.name = "username";
+        cache.update(&MemberAdd(member.clone()));
+        assert_eq!(MinimalMember::from(&member), minimal_member);
+    }
+
+    #[test]
+    fn from_cached_member_user() {
+        let cache = InMemoryCache::new();
+        let mut member_user = member_user();
+        let mut minimal_member = minimal_member_user();
+
+        cache.update(&MemberAdd(member_user.clone()));
+        assert_eq!(MinimalMember::from(&member_user), minimal_member_user());
+
+        member_user.user.avatar = None;
+        minimal_member.avatar_url = None;
+        cache.update(&MemberAdd(member_user.clone()));
         assert_eq!(MinimalMember::from(&member_user), minimal_member);
     }
 
