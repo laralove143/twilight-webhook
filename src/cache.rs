@@ -37,10 +37,12 @@ impl Cache {
         Self(DashMap::new())
     }
 
-    /// convenience function to get from the cache, requesting it from the api if it doesn't exist, creating it if it's also not returned
+    /// convenience function to get from the cache, requesting it from the api
+    /// if it doesn't exist, creating it if it's also not returned
     ///
     /// # Errors
-    /// returns an [`Error::Http`] or [`Error::Deserialize`] if the webhook isn't in the cache
+    /// returns an [`Error::Http`] or [`Error::Deserialize`] if the webhook
+    /// isn't in the cache
     ///
     /// # Panics
     /// if the webhook that was just inserted to the cache doesn't exist somehow
