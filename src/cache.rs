@@ -78,10 +78,8 @@ impl Cache {
             .models()
             .await?
             .into_iter()
-            .filter(|w| w.token.is_some())
-            .for_each(|w| {
-                self.0.insert(channel_id, w);
-            });
+            .find(|w| w.token.is_some())
+            .and_then(|w| self.0.insert(channel_id, w));
 
         Ok(())
     }
