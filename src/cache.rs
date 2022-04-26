@@ -37,6 +37,45 @@ impl Cache {
         Self(DashMap::new())
     }
 
+    /// convenience function to get from the cache, requesting it from the api if it doesn't exist, creating it if it's also not returned
+    ///
+    /// # Errors
+    /// returns an [`Error::Http`] or [`Error::Deserialize`] if the webhook isn't in the cache
+    ///
+    /// # Panics
+    /// if the webhook that was just inserted to the cache doesn't exist somehow
+    #[allow(clippy::unwrap_used)]
+    pub async fn get_infallible<'a>(
+        &self,
+        http: &Client,
+        channel_id: Id<ChannelMarker>,
+        name: &str,
+    ) -> Result<Ref<'_, Id<ChannelMarker>, Webhook>, Error> {
+        if let Some(webhook) = self.get(channel_id) {
+            Ok(webhook)
+        } else {
+            let webhook = if let Some(webhook) = http
+                .channel_webhooks(channel_id)
+                .exec()
+                .await?
+                .models()
+                .await?
+                .into_iter()
+                .find(|w| w.token.is_some())
+            {
+                webhook
+            } else {
+                http.create_webhook(channel_id, name)
+                    .exec()
+                    .await?
+                    .model()
+                    .await?
+            };
+            self.0.insert(channel_id, webhook);
+            Ok(self.get(channel_id).unwrap())
+        }
+    }
+
     /// creates the passed webhook and caches it, it takes a `CreateWebhook`
     /// instead of a `Webhook` to reduce boilerplate and avoid clones
     ///
