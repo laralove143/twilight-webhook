@@ -3,12 +3,13 @@ use twilight_cache_inmemory::model::CachedMember;
 use twilight_http::{request::channel::webhook::ExecuteWebhook, Client};
 use twilight_model::{
     channel::Webhook,
-    guild::Member,
+    guild::{Member, PartialMember},
     id::{
-        marker::{ChannelMarker, WebhookMarker},
+        marker::{ChannelMarker, GuildMarker, UserMarker, WebhookMarker},
         Id,
     },
     user::User,
+    util::ImageHash,
 };
 
 /// the errors that can be returned by utility methods
@@ -69,17 +70,12 @@ impl<'u> From<&'u Member> for MinimalMember<'u> {
             name: member.nick.as_ref().unwrap_or(&member.user.name),
             avatar_url: member.avatar.map_or_else(
                 || {
-                    Some(format!(
-                        "https://cdn.discordapp.com/avatars/{}/{}.png",
-                        member.user.id, member.user.avatar?
-                    ))
+                    member
+                        .user
+                        .avatar
+                        .map(|hash| user_avatar_url(hash, member.user.id))
                 },
-                |hash| {
-                    Some(format!(
-                        "https://cdn.discordapp.com/guilds/{}/users/{}/avatars/{hash}.png",
-                        member.guild_id, member.user.id
-                    ))
-                },
+                |hash| Some(member_avatar_url(hash, member.user.id, member.guild_id)),
             ),
         }
     }
@@ -112,9 +108,7 @@ impl<'u> From<&'u User> for MinimalMember<'u> {
     fn from(user: &'u User) -> Self {
         Self {
             name: &user.name,
-            avatar_url: user
-                .avatar
-                .map(|hash| format!("https://cdn.discordapp.com/avatars/{}/{hash}.png", user.id)),
+            avatar_url: user.avatar.map(|hash| user_avatar_url(hash, user.id)),
         }
     }
 }
@@ -148,6 +142,20 @@ impl<'t> MinimalWebhook<'t> {
 
         exec
     }
+}
+
+/// returns the cdn endpoint for a user's avatar
+fn user_avatar_url(hash: ImageHash, user_id: Id<UserMarker>) -> String {
+    format!("https://cdn.discordapp.com/avatars/{user_id}/{hash}.png")
+}
+
+/// returns the cdn endpoint for a member's avatar
+fn member_avatar_url(
+    hash: ImageHash,
+    user_id: Id<UserMarker>,
+    guild_id: Id<GuildMarker>,
+) -> String {
+    format!("https://cdn.discordapp.com/guilds/{guild_id}/users/{user_id}/avatars/{hash}.png",)
 }
 
 #[cfg(test)]
