@@ -32,6 +32,11 @@ impl Default for Cache {
 
 impl Cache {
     /// creates a new webhook cache
+    ///
+    /// # invalidation warning
+    /// you should run [`Self::validate`] on `WebhookUpdate` events to make sure
+    /// manually deleted webhooks are removed from the cache, otherwise
+    /// executing a cached webhook will return "Unknown Webhook" errors
     #[must_use]
     pub fn new() -> Self {
         Self(DashMap::new())
@@ -102,6 +107,36 @@ impl Cache {
         channel_id: Id<ChannelMarker>,
     ) -> Option<Ref<'_, Id<ChannelMarker>, Webhook>> {
         self.0.get(&channel_id)
+    }
+
+    /// validates the cache by retrieving the webhooks from the api, this is
+    /// because discord doesn't send info about updated webhooks in the events,
+    /// you should run this on `WebhooksUpdate` events
+    ///
+    /// # Errors
+    /// returns [`Error::Http`] or [`Error::Deserialize`]
+    pub async fn validate(
+        &self,
+        http: &Client,
+        channel_id: Id<ChannelMarker>,
+    ) -> Result<(), Error> {
+        if !self.0.contains_key(&channel_id) {
+            return Ok(());
+        }
+
+        if !http
+            .channel_webhooks(channel_id)
+            .exec()
+            .await?
+            .models()
+            .await?
+            .iter()
+            .any(|webhook| webhook.token.is_some())
+        {
+            self.0.remove(&channel_id);
+        }
+
+        Ok(())
     }
 
     /// replaces the webhooks from the cache with the ones returned by the http
