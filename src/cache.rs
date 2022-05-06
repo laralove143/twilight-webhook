@@ -170,15 +170,13 @@ impl Cache {
 
 #[cfg(test)]
 mod tests {
-    use twilight_http::Client;
     use twilight_model::{
         channel::{Webhook, WebhookType},
-        id::{marker::ChannelMarker, Id},
+        id::Id,
     };
 
     use crate::cache::Cache;
 
-    const CHANNEL_ID: Id<ChannelMarker> = Id::new(903_367_566_175_653_969);
     const WEBHOOK: Webhook = Webhook {
         id: Id::new(1),
         channel_id: Id::new(1),
@@ -193,38 +191,6 @@ mod tests {
         url: None,
         user: None,
     };
-
-    #[tokio::test]
-    #[allow(clippy::unwrap_used)]
-    async fn get_infallible() {
-        let cache = Cache::new();
-        let http = Client::new(env!("TEST_BOT_TOKEN").to_owned());
-
-        assert!(cache.get(CHANNEL_ID).is_none());
-
-        cache
-            .get_infallible(&http, CHANNEL_ID, "test")
-            .await
-            .unwrap();
-
-        assert!(cache.get(CHANNEL_ID).is_some());
-    }
-
-    #[tokio::test]
-    #[allow(clippy::unwrap_used)]
-    async fn create() {
-        let cache = Cache::new();
-        let http = Client::new(env!("TEST_BOT_TOKEN").to_owned());
-
-        assert!(cache.get(CHANNEL_ID).is_none());
-
-        cache
-            .create(http.create_webhook(CHANNEL_ID, "test"))
-            .await
-            .unwrap();
-
-        assert!(cache.get(CHANNEL_ID).is_some());
-    }
 
     #[test]
     fn get() {
