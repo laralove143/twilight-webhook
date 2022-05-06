@@ -51,10 +51,9 @@ impl<'t> TryFrom<&'t Webhook> for MinimalWebhook<'t> {
 /// a struct with only the required information to execute webhooks as
 /// members/users
 ///
-/// this implements `From<&Member>`, `From<(&CachedMember, &User)>` and
-/// `From<&User>` for convenience, the `From<Member>` and `From<(&CachedMember,
-/// &User)>` implementations try to use the member's guild nick and
-/// avatar, falling back to the user's name and avatar
+/// implements `From<&Member>` and `From<&User>` for convenience, if you only
+/// have a `PartialMember` or `CachedMember`, use the respective methods
+/// to make sure you're falling back to the user
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimalMember<'u> {
     /// the member's nick or name
@@ -62,6 +61,45 @@ pub struct MinimalMember<'u> {
     /// the cdn endpoint of the member's guild or user avatar, if the member has
     /// one
     avatar_url: Option<String>,
+}
+
+impl<'u> MinimalMember<'u> {
+    /// tries to use the member's nickname and avatar, falling back to the given
+    /// user's name and avatar
+    ///
+    /// this uses a separate user parameter to make sure a user is passed
+    ///
+    /// a guild id is required to use the member's avatar, if `None` is passed,
+    /// the only user's avatar will be used
+    #[must_use]
+    pub fn from_partial_member(
+        member: &'u PartialMember,
+        guild_id: Option<Id<GuildMarker>>,
+        user: &'u User,
+    ) -> Self {
+        Self {
+            name: member.nick.as_ref().unwrap_or(&user.name),
+            avatar_url: member
+                .avatar
+                .and_then(|hash| guild_id.map(|id| member_avatar_url(hash, user.id, id)))
+                .or_else(|| user.avatar.map(|hash| user_avatar_url(hash, user.id))),
+        }
+    }
+
+    /// tries to use the member's nickname and avatar, falling back to the given
+    /// user's name and avatar
+    ///
+    /// this uses a separate user parameter to make sure a user is passed
+    #[must_use]
+    pub fn from_cached_member(member: &'u CachedMember, user: &'u User) -> Self {
+        Self {
+            name: member.nick().unwrap_or(&user.name),
+            avatar_url: member.avatar().map_or_else(
+                || user.avatar.map(|hash| user_avatar_url(hash, user.id)),
+                |hash| Some(member_avatar_url(hash, user.id, member.guild_id())),
+            ),
+        }
+    }
 }
 
 impl<'u> From<&'u Member> for MinimalMember<'u> {
@@ -76,29 +114,6 @@ impl<'u> From<&'u Member> for MinimalMember<'u> {
                         .map(|hash| user_avatar_url(hash, member.user.id))
                 },
                 |hash| Some(member_avatar_url(hash, member.user.id, member.guild_id)),
-            ),
-        }
-    }
-}
-
-impl<'u> From<(&'u CachedMember, &'u User)> for MinimalMember<'u> {
-    fn from((member, user): (&'u CachedMember, &'u User)) -> Self {
-        Self {
-            name: member.nick().unwrap_or(&user.name),
-            avatar_url: member.avatar().map_or_else(
-                || {
-                    Some(format!(
-                        "https://cdn.discordapp.com/avatars/{}/{}.png",
-                        user.id, user.avatar?
-                    ))
-                },
-                |hash| {
-                    Some(format!(
-                        "https://cdn.discordapp.com/guilds/{}/users/{}/avatars/{hash}.png",
-                        member.guild_id(),
-                        user.id
-                    ))
-                },
             ),
         }
     }
@@ -168,8 +183,12 @@ mod tests {
         request::{Request, TryIntoRequest},
     };
     use twilight_model::{
-        datetime::Timestamp, gateway::payload::incoming::MemberAdd, guild::Member, id::Id,
-        user::User, util::ImageHash,
+        datetime::Timestamp,
+        gateway::payload::incoming::MemberAdd,
+        guild::{Member, PartialMember},
+        id::Id,
+        user::User,
+        util::ImageHash,
     };
 
     use crate::util::{MinimalMember, MinimalWebhook};
@@ -226,6 +245,22 @@ mod tests {
             premium_since: None,
             roles: vec![],
             user: user(),
+        }
+    }
+
+    #[allow(clippy::unwrap_used)]
+    fn partial_member() -> PartialMember {
+        PartialMember {
+            nick: Some("nick".to_owned()),
+            avatar: Some(ImageHash::from_str("a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").unwrap()),
+            joined_at: Timestamp::from_secs(0).unwrap(),
+            deaf: false,
+            mute: false,
+            communication_disabled_until: None,
+            premium_since: None,
+            user: None,
+            permissions: None,
+            roles: vec![],
         }
     }
 
@@ -293,6 +328,35 @@ mod tests {
     }
 
     #[test]
+    fn from_partial_member() {
+        let mut member = partial_member();
+        let mut minimal_member = minimal_member();
+        let guild_id = Some(Id::new(1));
+        let user = user();
+        assert_eq!(
+            MinimalMember::from_partial_member(&member, guild_id, &user),
+            minimal_member
+        );
+
+        member.avatar = None;
+        minimal_member.avatar_url = Some(
+            "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
+                .to_owned(),
+        );
+        assert_eq!(
+            MinimalMember::from_partial_member(&member, guild_id, &user),
+            minimal_member
+        );
+
+        member.nick = None;
+        minimal_member.name = "username";
+        assert_eq!(
+            MinimalMember::from_partial_member(&member, guild_id, &user),
+            minimal_member
+        );
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)]
     fn from_cached_member() {
         let cache = InMemoryCache::new();
@@ -301,13 +365,13 @@ mod tests {
 
         cache.update(&MemberAdd(member.clone()));
         assert_eq!(
-            MinimalMember::from((
+            MinimalMember::from_cached_member(
                 cache
                     .member(member.guild_id, member.user.id)
                     .unwrap()
                     .value(),
                 &member.user
-            )),
+            ),
             minimal_member
         );
 
