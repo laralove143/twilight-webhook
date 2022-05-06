@@ -18,8 +18,6 @@ pub enum Error {
     /// the given webhook to make a minimal webhook from contains no token
     #[error("the given webhook to make a minimal webhook from contains no token")]
     NoToken,
-    /// the given partial member to make a minimal member from contains no nick
-    /// or user
     /// an error was returned by twilight's http client
     #[error("an error was returned by twilight's http client: {0}")]
     Http(#[from] twilight_http::error::Error),
