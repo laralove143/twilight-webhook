@@ -441,6 +441,35 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
+    fn execute_as_member_thread() {
+        let thread_id = Id::new(1);
+
+        let webhook = MinimalWebhook {
+            id: Id::new(1),
+            token: "a",
+        };
+        let http = ClientBuilder::new().build();
+
+        let request_a = webhook
+            .execute_as_member(&http, Some(thread_id), &minimal_member())
+            .try_into_request()
+            .unwrap();
+        let request_b = http
+            .execute_webhook(Id::new(1), "a")
+            .username("nick")
+            .avatar_url(
+                "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
+                a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
+            )
+            .thread_id(thread_id)
+            .try_into_request()
+            .unwrap();
+
+        cmp_requests(&request_a, &request_b);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
     fn execute_as_member_user() {
         let webhook = MinimalWebhook {
             id: Id::new(1),
