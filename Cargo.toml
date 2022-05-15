@@ -8,10 +8,6 @@ categories = ["asynchronous", "caching", "web-programming::http-client", "web-pr
 version = "0.10.5"
 edition = "2021"
 
-[dev-dependencies]
-tokio = { version = "1.17", features = ["rt", "macros"] }
-twilight-gateway = "0.10"
-
 [dependencies]
 dashmap = "5.2"
 thiserror = "1.0"
