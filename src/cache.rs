@@ -21,6 +21,7 @@ pub enum Error {
 }
 
 /// Cache to hold webhooks, keyed by channel IDs for general usage
+#[derive(Debug)]
 pub struct Cache(DashMap<Id<ChannelMarker>, Webhook>);
 
 impl Default for Cache {
