@@ -36,6 +36,15 @@ pub struct MinimalWebhook<'t> {
     token: &'t str,
 }
 
+impl<'t> MinimalWebhook<'t> {
+    /// Make a `MinimalWebhook` from a webhook ID and token, you may need this
+    /// if you don't have a `Webhook`
+    #[must_use]
+    pub const fn new(id: Id<WebhookMarker>, token: &'t str) -> Self {
+        Self { id, token }
+    }
+}
+
 impl<'t> TryFrom<&'t Webhook> for MinimalWebhook<'t> {
     type Error = Error;
 
@@ -64,6 +73,32 @@ pub struct MinimalMember<'u> {
 }
 
 impl<'u> MinimalMember<'u> {
+    /// Make a `MinimalMember` from a username or nick and avatar, you should
+    /// only use this if the other methods or implementations don't work for
+    /// you
+    ///
+    /// The user ID is only required if the user or member has an avatar
+    ///
+    /// # Warning for `guild_id`
+    /// Pass the `guild_id` only if the avatar is a guild avatar, passing it
+    /// with a user avatar will result in an invalid avatar URL
+    #[must_use]
+    pub fn new(
+        name: &'u str,
+        avatar: Option<(ImageHash, Id<UserMarker>)>,
+        guild_id: Option<Id<GuildMarker>>,
+    ) -> Self {
+        Self {
+            name,
+            avatar_url: avatar.map(|(hash, user_id)| {
+                guild_id.map_or_else(
+                    || user_avatar_url(hash, user_id),
+                    |id| member_avatar_url(hash, user_id, id),
+                )
+            }),
+        }
+    }
+
     /// Tries to use the member's nickname and avatar, falling back to the given
     /// user's name and avatar
     ///
