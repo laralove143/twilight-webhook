@@ -1,6 +1,6 @@
 [package]
 name = "twilight-webhook"
-description = "caching and utility things for discord webhooks, a third party crate of the twilight ecosystem"
+description = "Caching and utility methods for Discord webhooks, a third party crate of the Twilight ecosystem"
 repository = "https://github.com/laralove143/twilight-webhook"
 license = "MIT"
 keywords = ["discord", "twilight", "webhooks"]
