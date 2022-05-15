@@ -7,21 +7,20 @@ use twilight_model::{
 };
 
 #[derive(Error, Debug)]
-/// an error occurred when trying to update the cache
+/// An error occurred when trying to update the cache
 pub enum Error {
-    /// an error was returned by twilight's http client
-    #[error("an error was returned by twilight's http client: {0}")]
+    /// An error was returned by Twilight's HTTP client while making the request
+    #[error("An error was returned by Twilight's HTTP client: {0}")]
     Http(#[from] twilight_http::error::Error),
-    /// an error was returned by twilight's http client while trying to
-    /// deserialize the response
+    /// An error was returned by Twilight's HTTP client while deserializing the
+    /// response
     #[error(
-        "an error was returned by twilight's http client while trying to deserialize the \
-         response: {0}"
+        "An error was returned by Twilight's HTTP client while deserializing the response: {0}"
     )]
     Deserialize(#[from] twilight_http::response::DeserializeBodyError),
 }
 
-/// cache to hold webhooks, keyed by channel ids for general usage
+/// Cache to hold webhooks, keyed by channel IDs for general usage
 pub struct Cache(DashMap<Id<ChannelMarker>, Webhook>);
 
 impl Default for Cache {
@@ -31,26 +30,29 @@ impl Default for Cache {
 }
 
 impl Cache {
-    /// creates a new webhook cache
+    /// Creates a new webhook cache
     ///
-    /// # invalidation warning
-    /// you should run [`Self::validate`] on `WebhookUpdate` events to make sure
-    /// manually deleted webhooks are removed from the cache, otherwise
-    /// executing a cached webhook will return "Unknown Webhook" errors
+    /// # Invalidation warning
+    /// You should run [`Self::validate`] on `WebhookUpdate` events to make sure
+    /// deleted webhooks are removed from the cache, otherwise, executing a
+    /// cached webhook will return `Unknown Webhook` errors
     #[must_use]
     pub fn new() -> Self {
         Self(DashMap::new())
     }
 
-    /// convenience function to get from the cache, requesting it from the api
+    /// Convenience function to get from the cache, requesting it from the API
     /// if it doesn't exist, creating it if it's also not returned
     ///
+    /// # Required permissions
+    /// Make sure the bot has `MANAGE_WEBHOOKS` permission in the given channel
+    ///
     /// # Errors
-    /// returns an [`Error::Http`] or [`Error::Deserialize`] if the webhook
+    /// Returns an [`Error::Http`] or [`Error::Deserialize`] if the webhook
     /// isn't in the cache
     ///
     /// # Panics
-    /// if the webhook that was just inserted to the cache doesn't exist somehow
+    /// If the webhook that was just inserted to the cache somehow doesn't exist
     #[allow(clippy::unwrap_used)]
     pub async fn get_infallible<'a>(
         &self,
@@ -83,16 +85,16 @@ impl Cache {
         }
     }
 
-    /// creates the passed webhook and caches it, it takes a `CreateWebhook`
+    /// Creates the passed webhook and caches it, it takes a `CreateWebhook`
     /// instead of a `Webhook` to reduce boilerplate and avoid clones
     ///
-    /// # race condition warning
-    /// webhooks created without using this function will eventually be cached
+    /// # Race condition warning
+    /// Webhooks created without using this function will eventually be cached
     /// by the [`Self::update`] method, but may not be immediately available to
     /// access
     ///
     /// # Errors
-    /// returns an [`Error::Http`] or [`Error::Deserialize`]
+    /// Returns [`Error::Http`] or [`Error::Deserialize`]
     pub async fn create<'a>(&self, create_webhook: CreateWebhook<'a>) -> Result<(), Error> {
         let webhook = create_webhook.exec().await?.model().await?;
         self.0.insert(webhook.channel_id, webhook);
@@ -100,7 +102,7 @@ impl Cache {
         Ok(())
     }
 
-    /// returns the webhook for the given channel id, if it exists
+    /// Returns the webhook for the given `channel_id`, if it exists
     #[must_use]
     pub fn get(
         &self,
@@ -109,12 +111,18 @@ impl Cache {
         self.0.get(&channel_id)
     }
 
-    /// validates the cache by retrieving the webhooks from the api, this is
-    /// because discord doesn't send info about updated webhooks in the events,
-    /// you should run this on `WebhooksUpdate` events
+    /// Validates the cache by retrieving the webhooks from the API
+    ///
+    /// Using the API is required because Discord doesn't send info about
+    /// updated webhooks in the events
+    ///
+    /// # Invalidation warning
+    /// You should run this on `WebhookUpdate` events to make sure deleted
+    /// webhooks are removed from the cache, otherwise, executing a
+    /// cached webhook will return `Unknown Webhook` errors
     ///
     /// # Errors
-    /// returns [`Error::Http`] or [`Error::Deserialize`]
+    /// Returns [`Error::Http`] or [`Error::Deserialize`]
     pub async fn validate(
         &self,
         http: &Client,
@@ -139,19 +147,12 @@ impl Cache {
         Ok(())
     }
 
-    /// replaces the webhooks from the cache with the ones returned by the http
+    /// Replaces the webhooks from the cache with the ones returned by the HTTP
     /// client
-    ///
-    /// the http client is used because `WebhooksUpdate` events don't contain
-    /// webhook information
-    ///
-    /// # possible overhead
-    /// try not to call this on channels whose webhooks you won't use, as it
-    /// makes an http request every time
     ///
     /// # Errors
     /// returns an [`Error::Http`] or [`Error::Deserialize`]
-    #[deprecated(note = "use `get_or_create` to only request webhooks you actually need")]
+    #[deprecated(note = "use `get_or_create` to only insert webhooks you actually need")]
     pub async fn update(&self, http: &Client, channel_id: Id<ChannelMarker>) -> Result<(), Error> {
         self.0.remove(&channel_id);
 

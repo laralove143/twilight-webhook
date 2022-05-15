@@ -1,7 +1,7 @@
-//! caching and utility things for discord webhooks, a third party crate of the
-//! twilight ecosystem
+//! Caching and utility methods for Discord webhooks, a third party crate of the
+//! [Twilight ecosystem](https://api.twilight.rs)
 //!
-//! refer to the modules' docs for more
+//! Refer to the modules' docs for more
 
 #![warn(clippy::cargo, clippy::nursery, clippy::pedantic, clippy::restriction)]
 #![allow(
@@ -13,7 +13,7 @@
     clippy::pattern_type_mismatch
 )]
 
-/// the webhooks cache
+/// The webhooks cache
 pub mod cache;
-/// various utility functions for webhooks
+/// Various utility functions for webhooks
 pub mod util;

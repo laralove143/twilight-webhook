@@ -12,26 +12,27 @@ use twilight_model::{
     util::ImageHash,
 };
 
-/// the errors that can be returned by utility methods
+/// The errors that can be returned by utility methods
 #[derive(Error, Debug)]
 pub enum Error {
-    /// the given webhook to make a minimal webhook from contains no token
-    #[error("the given webhook to make a minimal webhook from contains no token")]
+    /// The given webhook to make a [`MinimalWebhook`] from doesn't contain a
+    /// token
+    #[error("The given webhook to make a `MinimalWebhook` from doesn't contain a token")]
     NoToken,
-    /// an error was returned by twilight's http client
-    #[error("an error was returned by twilight's http client: {0}")]
+    /// An error was returned by Twilight's HTTP client
+    #[error("An error was returned by Twilight's HTTP client: {0}")]
     Http(#[from] twilight_http::error::Error),
 }
 
-/// a struct with only the required information to execute webhooks
+/// A struct with only the required information to execute webhooks
 ///
-/// this implements `TryFrom<&Webhook>` for convenience, which might return
+/// Implements `TryFrom<&Webhook>` for convenience, which might return
 /// [`Error::NoToken`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimalWebhook<'t> {
-    /// the webhook's id, required when executing it
+    /// The webhook's ID
     id: Id<WebhookMarker>,
-    /// the webhook's token, required when executing it
+    /// The webhook's token
     token: &'t str,
 }
 
@@ -46,29 +47,30 @@ impl<'t> TryFrom<&'t Webhook> for MinimalWebhook<'t> {
     }
 }
 
-/// a struct with only the required information to execute webhooks as
+/// A struct with only the required information to execute webhooks as
 /// members/users
 ///
-/// implements `From<&Member>` and `From<&User>` for convenience, if you only
-/// have a `PartialMember` or `CachedMember`, use the respective methods
-/// to make sure you're falling back to the user
+/// Implements `From<&Member>` and `From<&User>` for convenience, if you only
+/// have a `PartialMember` or `CachedMember`, use
+/// [`MinimalMember::from_partial_member`] or [`MinimalMember::
+/// from_cached_member`] to make sure you're falling back to the user
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimalMember<'u> {
-    /// the member's nick or name
+    /// The member's nick or username
     name: &'u str,
-    /// the cdn endpoint of the member's guild or user avatar, if the member has
+    /// The CDN endpoint of the member's guild or user avatar, if the member has
     /// one
     avatar_url: Option<String>,
 }
 
 impl<'u> MinimalMember<'u> {
-    /// tries to use the member's nickname and avatar, falling back to the given
+    /// Tries to use the member's nickname and avatar, falling back to the given
     /// user's name and avatar
     ///
-    /// this uses a separate user parameter to make sure a user is passed
+    /// Uses a separate user parameter to make sure a user is passed
     ///
-    /// a guild id is required to use the member's avatar, if `None` is passed,
-    /// the only user's avatar will be used
+    /// The `guild_id` is required to use the member's avatar, if `None` is
+    /// passed, only the user's avatar will be used
     #[must_use]
     pub fn from_partial_member(
         member: &'u PartialMember,
@@ -84,10 +86,10 @@ impl<'u> MinimalMember<'u> {
         }
     }
 
-    /// tries to use the member's nickname and avatar, falling back to the given
+    /// Tries to use the member's nickname and avatar, falling back to the given
     /// user's name and avatar
     ///
-    /// this uses a separate user parameter to make sure a user is passed
+    /// Uses a separate user parameter to make sure a user is passed
     #[must_use]
     pub fn from_cached_member(member: &'u CachedMember, user: &'u User) -> Self {
         Self {
@@ -127,14 +129,15 @@ impl<'u> From<&'u User> for MinimalMember<'u> {
 }
 
 impl<'t> MinimalWebhook<'t> {
-    /// send a webhook with the member's avatar and nick
-    /// this takes the http client to return its methods, it doesn't make any
+    /// Execute a webhook with the member's avatar and nick
+    ///
+    /// The `http` parameter is used to return its methods, it doesn't make any
     /// requests
     ///
-    /// # warning for thread channels
-    /// you should call this on the parent channel's webhook if the channel is a
-    /// thread, and pass the thread's channel id you want to send this webhook
-    /// to
+    /// # Warning for thread channels
+    /// You should call this on the parent channel's webhook if the channel is a
+    /// thread, and pass the thread's channel ID you want to execute this
+    /// webhook on
     pub fn execute_as_member<'a>(
         &'a self,
         http: &'a Client,
@@ -157,12 +160,12 @@ impl<'t> MinimalWebhook<'t> {
     }
 }
 
-/// returns the cdn endpoint for a user's avatar
+/// Returns the CDN endpoint for a user's avatar
 fn user_avatar_url(hash: ImageHash, user_id: Id<UserMarker>) -> String {
     format!("https://cdn.discordapp.com/avatars/{user_id}/{hash}.png")
 }
 
-/// returns the cdn endpoint for a member's avatar
+/// Returns the CDN endpoint for a member's avatar
 fn member_avatar_url(
     hash: ImageHash,
     user_id: Id<UserMarker>,

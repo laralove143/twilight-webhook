@@ -2,6 +2,6 @@
 [![crates.io - view](https://img.shields.io/badge/crates.io-view-CB9E48?style=for-the-badge&logo=Rust)](https://crates.io/crates/twilight-webhook)
 
 # twilight-webhook
-caching and utility things for discord webhooks, a third party crate of the twilight ecosystem
+Caching and utility methods for Discord webhooks, a third party crate of the [Twilight ecosystem](https://github.com/twilight-rs/twilight)
 
-refer to the docs more
+Refer to the docs for more
