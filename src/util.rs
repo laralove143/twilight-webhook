@@ -81,7 +81,8 @@ impl<'u> MinimalMember<'u> {
             name: member.nick.as_ref().unwrap_or(&user.name),
             avatar_url: member
                 .avatar
-                .and_then(|hash| guild_id.map(|id| member_avatar_url(hash, user.id, id)))
+                .zip(guild_id)
+                .map(|(hash, id)| member_avatar_url(hash, user.id, id))
                 .or_else(|| user.avatar.map(|hash| user_avatar_url(hash, user.id))),
         }
     }
@@ -94,10 +95,10 @@ impl<'u> MinimalMember<'u> {
     pub fn from_cached_member(member: &'u CachedMember, user: &'u User) -> Self {
         Self {
             name: member.nick().unwrap_or(&user.name),
-            avatar_url: member.avatar().map_or_else(
-                || user.avatar.map(|hash| user_avatar_url(hash, user.id)),
-                |hash| Some(member_avatar_url(hash, user.id, member.guild_id())),
-            ),
+            avatar_url: member
+                .avatar()
+                .map(|hash| member_avatar_url(hash, user.id, member.guild_id()))
+                .or_else(|| user.avatar.map(|hash| user_avatar_url(hash, user.id))),
         }
     }
 }
