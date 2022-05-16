@@ -22,6 +22,9 @@ pub enum Error {
     /// An error was returned by Twilight's HTTP client
     #[error("An error was returned by Twilight's HTTP client: {0}")]
     Http(#[from] twilight_http::error::Error),
+    /// An error was returned by Twilight while validating the webhook
+    #[error("An error was returned by Twilight while validating: {0}")]
+    Validation(#[from] twilight_validate::message::MessageValidationError),
 }
 
 /// A struct with only the required information to execute webhooks
@@ -174,15 +177,18 @@ impl<'t> MinimalWebhook<'t> {
     /// You should call this on the parent channel's webhook if the channel is a
     /// thread, and pass the thread's channel ID you want to execute this
     /// webhook on
+    ///
+    /// # Errors
+    /// Returns [`Error::Validation`] when the member's username/nick is invalid
     pub fn execute_as_member<'a>(
         &'a self,
         http: &'a Client,
         thread: Option<Id<ChannelMarker>>,
         member: &'a MinimalMember,
-    ) -> ExecuteWebhook<'a> {
+    ) -> Result<ExecuteWebhook<'a>, Error> {
         let mut exec = http
             .execute_webhook(self.id, self.token)
-            .username(member.name);
+            .username(member.name)?;
 
         if let Some(id) = thread {
             exec = exec.thread_id(id);
@@ -192,7 +198,7 @@ impl<'t> MinimalWebhook<'t> {
             exec = exec.avatar_url(url);
         };
 
-        exec
+        Ok(exec)
     }
 }
 
@@ -220,12 +226,11 @@ mod tests {
         request::{Request, TryIntoRequest},
     };
     use twilight_model::{
-        datetime::Timestamp,
         gateway::payload::incoming::MemberAdd,
         guild::{Member, PartialMember},
         id::Id,
         user::User,
-        util::ImageHash,
+        util::{ImageHash, Timestamp},
     };
 
     use crate::util::{MinimalMember, MinimalWebhook};
@@ -463,11 +468,12 @@ mod tests {
 
         let request_a = webhook
             .execute_as_member(&http, None, &minimal_member())
+            .unwrap()
             .try_into_request()
             .unwrap();
         let request_b = http
             .execute_webhook(Id::new(1), "a")
-            .username("nick")
+            .username("nick").unwrap()
             .avatar_url(
                 "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
                 a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
@@ -491,11 +497,12 @@ mod tests {
 
         let request_a = webhook
             .execute_as_member(&http, Some(thread_id), &minimal_member())
+            .unwrap()
             .try_into_request()
             .unwrap();
         let request_b = http
             .execute_webhook(Id::new(1), "a")
-            .username("nick")
+            .username("nick").unwrap()
             .avatar_url(
                 "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
                 a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
@@ -518,11 +525,13 @@ mod tests {
 
         let request_a = webhook
             .execute_as_member(&http, None, &minimal_member_user())
+            .unwrap()
             .try_into_request()
             .unwrap();
         let request_b = http
             .execute_webhook(Id::new(1), "a")
             .username("username")
+            .unwrap()
             .avatar_url(
                 "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",
             )

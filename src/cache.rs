@@ -18,6 +18,9 @@ pub enum Error {
         "An error was returned by Twilight's HTTP client while deserializing the response: {0}"
     )]
     Deserialize(#[from] twilight_http::response::DeserializeBodyError),
+    /// An error was returned by Twilight while validating a request
+    #[error("An error was returned by Twilight while validating a request: {0}")]
+    Validation(#[from] twilight_validate::request::ValidationError),
 }
 
 /// Cache to hold webhooks, keyed by channel IDs for general usage
@@ -75,7 +78,7 @@ impl Cache {
             {
                 webhook
             } else {
-                http.create_webhook(channel_id, name)
+                http.create_webhook(channel_id, name)?
                     .exec()
                     .await?
                     .model()
