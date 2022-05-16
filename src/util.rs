@@ -341,6 +341,52 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
+    fn new_minimal_member() {
+        let mut minimal_member = minimal_member();
+        assert_eq!(
+            MinimalMember::new(
+                "nick",
+                Some((
+                    ImageHash::from_str("a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").unwrap(),
+                    Id::new(2)
+                )),
+                Some(Id::new(1))
+            ),
+            minimal_member
+        );
+
+        minimal_member.avatar_url = Some(
+            "https://cdn.discordapp.com/avatars/2/a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
+                .to_owned(),
+        );
+        assert_eq!(
+            MinimalMember::new(
+                "nick",
+                Some((
+                    ImageHash::from_str("a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+                    Id::new(2)
+                )),
+                None
+            ),
+            minimal_member
+        );
+
+        minimal_member.name = "username";
+        assert_eq!(
+            MinimalMember::new(
+                "username",
+                Some((
+                    ImageHash::from_str("a_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap(),
+                    Id::new(2)
+                )),
+                None
+            ),
+            minimal_member
+        );
+    }
+
+    #[test]
     fn from_member() {
         let mut member = member();
         let mut minimal_member = minimal_member();
