@@ -3,6 +3,7 @@ use thiserror::Error;
 use twilight_http::{request::channel::webhook::CreateWebhook, Client};
 use twilight_model::{
     channel::Webhook,
+    gateway::event::Event,
     id::{marker::ChannelMarker, Id},
 };
 
@@ -37,9 +38,12 @@ impl Cache {
     /// Creates a new webhook cache
     ///
     /// # Invalidation warning
-    /// You should run [`Self::validate`] on `WebhookUpdate` events to make sure
-    /// deleted webhooks are removed from the cache, otherwise, executing a
-    /// cached webhook will return `Unknown Webhook` errors
+    /// Make sure you receive `ChannelDelete` and `GuildDelete` events and call
+    /// [`Cache::update`] method on them to remove inaccessible webhooks from
+    /// the cache
+    ///
+    /// Also make sure you call [`Cache::validate`] method on `WebhookUpdate`
+    /// events to remove manually deleted webhooks from the cache
     #[must_use]
     pub fn new() -> Self {
         Self(DashMap::new())
@@ -92,11 +96,6 @@ impl Cache {
     /// Creates the passed webhook and caches it, it takes a `CreateWebhook`
     /// instead of a `Webhook` to reduce boilerplate and avoid clones
     ///
-    /// # Race condition warning
-    /// Webhooks created without using this function will eventually be cached
-    /// by the [`Self::update`] method, but may not be immediately available to
-    /// access
-    ///
     /// # Errors
     /// Returns [`Error::Http`] or [`Error::Deserialize`]
     pub async fn create<'a>(&self, create_webhook: CreateWebhook<'a>) -> Result<(), Error> {
@@ -126,7 +125,8 @@ impl Cache {
     /// cached webhook will return `Unknown Webhook` errors
     ///
     /// # Required permissions
-    /// Make sure the bot has `MANAGE_WEBHOOKS` permission in the given channel
+    /// If the given `channel_id` is in the cache, `MANAGE_WEBHOOKS` permission
+    /// is required
     ///
     /// # Errors
     /// Returns [`Error::Http`] or [`Error::Deserialize`]
@@ -153,12 +153,31 @@ impl Cache {
 
         Ok(())
     }
+
+    /// Removes the cached webhooks for the given event's channel or guild if
+    /// the event is `ChannelDelete` or `GuildDelete`
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub fn update(&self, event: &Event) {
+        match event {
+            Event::ChannelDelete(channel) => {
+                self.0.remove(&channel.id);
+            }
+            Event::GuildDelete(guild) => self
+                .0
+                .retain(|_, webhook| webhook.guild_id != Some(guild.id)),
+            _ => (),
+        };
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use twilight_model::{
-        channel::{Webhook, WebhookType},
+        channel::{Channel, ChannelType, Webhook, WebhookType},
+        gateway::{
+            event::Event,
+            payload::incoming::{ChannelDelete, GuildDelete},
+        },
         id::Id,
     };
 
@@ -170,7 +189,7 @@ mod tests {
         kind: WebhookType::Application,
         application_id: None,
         avatar: None,
-        guild_id: None,
+        guild_id: Some(Id::new(10)),
         name: None,
         source_channel: None,
         source_guild: None,
@@ -187,5 +206,57 @@ mod tests {
         assert!(cache.get(Id::new(2)).is_none());
 
         assert_eq!(cache.get(Id::new(1)).as_deref(), Some(&WEBHOOK));
+    }
+
+    #[test]
+    fn update() {
+        let cache = Cache::new();
+        cache.0.insert(Id::new(1), WEBHOOK);
+        cache.0.insert(Id::new(2), WEBHOOK);
+
+        cache.update(&Event::GuildDelete(GuildDelete {
+            id: Id::new(11),
+            unavailable: false,
+        }));
+        assert_eq!(cache.get(Id::new(1)).as_deref(), Some(&WEBHOOK));
+
+        cache.update(&Event::GuildDelete(GuildDelete {
+            id: Id::new(10),
+            unavailable: false,
+        }));
+        assert!(cache.get(Id::new(1)).is_none());
+        assert!(cache.get(Id::new(2)).is_none());
+
+        cache.0.insert(Id::new(3), WEBHOOK);
+        cache.update(&Event::ChannelDelete(Box::new(ChannelDelete(Channel {
+            id: Id::new(3),
+            guild_id: Some(Id::new(10)),
+            kind: ChannelType::GuildText,
+            application_id: None,
+            bitrate: None,
+            default_auto_archive_duration: None,
+            icon: None,
+            invitable: None,
+            last_message_id: None,
+            last_pin_timestamp: None,
+            member: None,
+            member_count: None,
+            message_count: None,
+            name: None,
+            newly_created: None,
+            nsfw: None,
+            owner_id: None,
+            parent_id: None,
+            permission_overwrites: None,
+            position: None,
+            rate_limit_per_user: None,
+            recipients: None,
+            rtc_region: None,
+            thread_metadata: None,
+            topic: None,
+            user_limit: None,
+            video_quality_mode: None,
+        }))));
+        assert!(cache.get(Id::new(3)).is_none());
     }
 }
