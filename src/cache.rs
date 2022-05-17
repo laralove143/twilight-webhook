@@ -153,27 +153,6 @@ impl Cache {
 
         Ok(())
     }
-
-    /// Replaces the webhooks from the cache with the ones returned by the HTTP
-    /// client
-    ///
-    /// # Errors
-    /// returns an [`Error::Http`] or [`Error::Deserialize`]
-    #[deprecated(note = "use `get_or_create` to only insert webhooks you actually need")]
-    pub async fn update(&self, http: &Client, channel_id: Id<ChannelMarker>) -> Result<(), Error> {
-        self.0.remove(&channel_id);
-
-        http.channel_webhooks(channel_id)
-            .exec()
-            .await?
-            .models()
-            .await?
-            .into_iter()
-            .find(|w| w.token.is_some())
-            .and_then(|w| self.0.insert(channel_id, w));
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
