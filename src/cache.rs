@@ -4,6 +4,7 @@ use twilight_http::{request::channel::webhook::CreateWebhook, Client};
 use twilight_model::{
     channel::Webhook,
     gateway::event::Event,
+    guild::Permissions,
     id::{marker::ChannelMarker, Id},
 };
 
@@ -119,14 +120,14 @@ impl Cache {
     /// Using the API is required because Discord doesn't send info about
     /// updated webhooks in the events
     ///
+    /// `permissions_in_channel` is used to remove the webhook from the cache if
+    /// the bot no longer has `MANAGE_WEBHOOKS` permission, since the webhooks
+    /// can't be validated without it
+    ///
     /// # Invalidation warning
     /// You should run this on `WebhookUpdate` events to make sure deleted
     /// webhooks are removed from the cache, otherwise, executing a
     /// cached webhook will return `Unknown Webhook` errors
-    ///
-    /// # Required permissions
-    /// If the given `channel_id` is in the cache, `MANAGE_WEBHOOKS` permission
-    /// is required
     ///
     /// # Errors
     /// Returns [`Error::Http`] or [`Error::Deserialize`]
@@ -134,8 +135,14 @@ impl Cache {
         &self,
         http: &Client,
         channel_id: Id<ChannelMarker>,
+        permissions_in_channel: Permissions,
     ) -> Result<(), Error> {
         if !self.0.contains_key(&channel_id) {
+            return Ok(());
+        }
+
+        if !permissions_in_channel.contains(Permissions::MANAGE_WEBHOOKS) {
+            self.0.remove(&channel_id);
             return Ok(());
         }
 
