@@ -125,6 +125,9 @@ impl Cache {
     /// webhooks are removed from the cache, otherwise, executing a
     /// cached webhook will return `Unknown Webhook` errors
     ///
+    /// # Required permissions
+    /// Make sure the bot has `MANAGE_WEBHOOKS` permission in the given channel
+    ///
     /// # Errors
     /// Returns [`Error::Http`] or [`Error::Deserialize`]
     pub async fn validate(
