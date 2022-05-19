@@ -6,6 +6,10 @@ Caching and utility methods for Discord webhooks, a third party crate of the [Tw
 
 Refer to the docs for more
 
+## Features
+- Caching webhooks
+- Executing webhooks with a member or user's avatar and nick/username
+
 ## Contributing
 Contributions or even opening issues are very welcomed
 
