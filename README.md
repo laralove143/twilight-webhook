@@ -6,8 +6,8 @@ Caching and utility methods for Discord webhooks, a third party crate of the [Tw
 
 Refer to the docs for more
 
-# Contributing
+## Contributing
 Contributions or even opening issues are very welcomed
 
-# Licence
+## Licence
 Licensed MIT, this is a third party crate that's not affiliated with the Twilight organization
