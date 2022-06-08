@@ -25,17 +25,23 @@ pub enum Error {
     Validation(#[from] twilight_validate::request::ValidationError),
 }
 
+#[deprecated = "The alias is to avoid breaking changes, you should prefer the type this points to: \
+                [`WebhooksCache`]"]
+/// Cache to hold webhooks, keyed by channel IDs for general usage
+pub type Cache = WebhooksCache;
+
 /// Cache to hold webhooks, keyed by channel IDs for general usage
 #[derive(Debug)]
-pub struct Cache(DashMap<Id<ChannelMarker>, Webhook>);
+#[allow(clippy::module_name_repetitions)]
+pub struct WebhooksCache(DashMap<Id<ChannelMarker>, Webhook>);
 
-impl Default for Cache {
+impl Default for WebhooksCache {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Cache {
+impl WebhooksCache {
     /// Creates a new webhook cache
     ///
     /// # Invalidation warning
@@ -188,7 +194,7 @@ mod tests {
         id::Id,
     };
 
-    use crate::cache::Cache;
+    use crate::cache::WebhooksCache;
 
     const WEBHOOK: Webhook = Webhook {
         id: Id::new(1),
@@ -207,7 +213,7 @@ mod tests {
 
     #[test]
     fn get() {
-        let cache = Cache::new();
+        let cache = WebhooksCache::new();
         cache.0.insert(Id::new(1), WEBHOOK);
 
         assert!(cache.get(Id::new(2)).is_none());
@@ -217,7 +223,7 @@ mod tests {
 
     #[test]
     fn update() {
-        let cache = Cache::new();
+        let cache = WebhooksCache::new();
         cache.0.insert(Id::new(1), WEBHOOK);
         cache.0.insert(Id::new(2), WEBHOOK);
 
