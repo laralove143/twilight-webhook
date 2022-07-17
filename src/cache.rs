@@ -25,11 +25,6 @@ pub enum Error {
     Validation(#[from] twilight_validate::request::ValidationError),
 }
 
-#[deprecated = "The alias is to avoid breaking changes, you should prefer the type this points to: \
-                [`WebhooksCache`]"]
-/// Cache to hold webhooks, keyed by channel IDs for general usage
-pub type Cache = WebhooksCache;
-
 /// Cache to hold webhooks, keyed by channel IDs for general usage
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
