@@ -109,7 +109,7 @@ impl WebhooksCache {
     /// # Panics
     /// If the webhook that was just inserted to the cache somehow doesn't exist
     #[allow(clippy::unwrap_used)]
-    pub async fn get_infallible<'a>(
+    pub async fn get_infallible(
         &self,
         http: &Client,
         channel_id: Id<ChannelMarker>,
