@@ -1,11 +1,15 @@
 use dashmap::{mapref::one::Ref, DashMap};
 use thiserror::Error;
+use twilight_cache_inmemory::InMemoryCache;
 use twilight_http::{request::channel::webhook::CreateWebhook, Client};
 use twilight_model::{
     channel::Webhook,
     gateway::event::Event,
     guild::Permissions,
-    id::{marker::ChannelMarker, Id},
+    id::{
+        marker::{ChannelMarker, UserMarker},
+        Id,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -23,6 +27,52 @@ pub enum Error {
     /// An error was returned by Twilight while validating a request
     #[error("An error was returned by Twilight while validating a request: {0}")]
     Validation(#[from] twilight_validate::request::ValidationError),
+    /// An error was returned by Twilight while trying to get the permissions
+    /// from the cache
+    #[error(
+        "An error was returned by Twilight while trying to get the permissions from the cache: {0}"
+    )]
+    CachePermissions(#[from] twilight_cache_inmemory::permission::ChannelError),
+}
+
+#[derive(Debug)]
+/// Specify how permissions are handled on [`WebhooksCache::update`]
+pub enum PermissionsSource<'cache> {
+    /// Use the given permissions
+    Given(Permissions),
+    /// Use the cache to get permissions
+    ///
+    /// Refer to [Twilight's docs] to make sure the passed cache is valid
+    ///
+    /// [Twilight's docs]:https://api.twilight.rs/twilight_cache_inmemory/permission/index.html
+    Cached {
+        /// The cache to get the permissions from
+        cache: &'cache InMemoryCache,
+        /// The bot's ID
+        current_user_id: Id<UserMarker>,
+    },
+    /// Understand the permissions from the error-response of the API request
+    ///
+    /// You may want to use this if you aren't already using `InMemoryCache`'s
+    /// permission feature, since the overhead of avoidable requests is usually
+    /// lower than caching the permissions
+    Request,
+}
+
+impl PermissionsSource<'_> {
+    /// Get the permissions from the source
+    fn get(self, channel_id: Id<ChannelMarker>) -> Result<Permissions, Error> {
+        Ok(match self {
+            PermissionsSource::Given(permissions) => permissions,
+            PermissionsSource::Cached {
+                cache,
+                current_user_id,
+            } => cache
+                .permissions()
+                .in_channel(current_user_id, channel_id)?,
+            PermissionsSource::Request => Permissions::all(),
+        })
+    }
 }
 
 /// Cache to hold webhooks, keyed by channel IDs for general usage
@@ -40,12 +90,7 @@ impl WebhooksCache {
     /// Creates a new webhook cache
     ///
     /// # Invalidation warning
-    /// Make sure you receive `ChannelDelete` and `GuildDelete` events and call
-    /// [`Cache::update`] method on them to remove inaccessible webhooks from
-    /// the cache
-    ///
-    /// Also make sure you call [`Cache::validate`] method on `WebhookUpdate`
-    /// events to remove manually deleted webhooks from the cache
+    /// Refer to the docs for [`WebhooksCache::update`] to avoid invalidation
     #[must_use]
     pub fn new() -> Self {
         Self(DashMap::new())
@@ -116,56 +161,32 @@ impl WebhooksCache {
         self.0.get(&channel_id)
     }
 
-    /// Validates the cache by retrieving the webhooks from the API
+    /// Removes the cached webhooks for the given event's channel or guild
     ///
-    /// Using the API is required because Discord doesn't send info about
-    /// updated webhooks in the events
+    /// Unless the event is `WebhookUpdate`, this function isn't actually
+    /// `async`, `http` and `permissions` aren't used, and it isn't fallible
     ///
-    /// `permissions_in_channel` is used to remove the webhook from the cache if
-    /// the bot no longer has `MANAGE_WEBHOOKS` permission, since the webhooks
-    /// can't be validated without it
+    /// `http` is required because Discord doesn't send info about updated
+    /// webhooks in the event
+    ///
+    /// `permissions` is required because the bot needs `MANAGE_WEBHOOKS`
+    /// permissions to request webhooks
     ///
     /// # Invalidation warning
-    /// You should run this on `WebhookUpdate` events to make sure deleted
-    /// webhooks are removed from the cache, otherwise, executing a
-    /// cached webhook will return `Unknown Webhook` errors
+    /// You should run this on `ChannelDelete`, `GuildDelete` and `WebhookUpdate`
+    /// events to make sure deleted webhooks are removed from the cache,
+    /// or else executing a cached webhook will return `Unknown Webhook` errors
     ///
     /// # Errors
-    /// Returns [`Error::Http`] or [`Error::Deserialize`]
-    pub async fn validate(
-        &self,
-        http: &Client,
-        channel_id: Id<ChannelMarker>,
-        permissions_in_channel: Permissions,
-    ) -> Result<(), Error> {
-        if !self.0.contains_key(&channel_id) {
-            return Ok(());
-        }
-
-        if !permissions_in_channel.contains(Permissions::MANAGE_WEBHOOKS) {
-            self.0.remove(&channel_id);
-            return Ok(());
-        }
-
-        if !http
-            .channel_webhooks(channel_id)
-            .exec()
-            .await?
-            .models()
-            .await?
-            .iter()
-            .any(|webhook| webhook.token.is_some())
-        {
-            self.0.remove(&channel_id);
-        }
-
-        Ok(())
-    }
-
-    /// Removes the cached webhooks for the given event's channel or guild if
-    /// the event is `ChannelDelete` or `GuildDelete`
+    /// Returns [`Error::Http`], [`Error::Deserialize`], or when
+    /// [`PermissionsSource::Cache`] is passed, [`Error::CachePermissions`]
     #[allow(clippy::wildcard_enum_match_arm)]
-    pub fn update(&self, event: &Event) {
+    pub async fn update(
+        &self,
+        event: &Event,
+        http: &Client,
+        permissions: PermissionsSource<'_>,
+    ) -> Result<(), Error> {
         match event {
             Event::ChannelDelete(channel) => {
                 self.0.remove(&channel.id);
@@ -173,23 +194,52 @@ impl WebhooksCache {
             Event::GuildDelete(guild) => self
                 .0
                 .retain(|_, webhook| webhook.guild_id != Some(guild.id)),
+            Event::WebhooksUpdate(update) => {
+                if !self.0.contains_key(&update.channel_id) {
+                    return Ok(());
+                }
+
+                if !permissions
+                    .get(update.channel_id)?
+                    .contains(Permissions::MANAGE_WEBHOOKS)
+                {
+                    self.0.remove(&update.channel_id);
+                    return Ok(());
+                }
+
+                if let Ok(response) = http.channel_webhooks(update.channel_id).exec().await {
+                    if response
+                        .models()
+                        .await?
+                        .iter()
+                        .any(|webhook| webhook.token.is_some())
+                    {
+                        return Ok(());
+                    }
+                };
+
+                self.0.remove(&update.channel_id);
+            }
             _ => (),
         };
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use twilight_http::Client;
     use twilight_model::{
         channel::{Channel, ChannelType, Webhook, WebhookType},
         gateway::{
             event::Event,
-            payload::incoming::{ChannelDelete, GuildDelete},
+            payload::incoming::{ChannelDelete, GuildDelete, WebhooksUpdate},
         },
         id::Id,
     };
 
-    use crate::cache::WebhooksCache;
+    use crate::cache::{PermissionsSource, WebhooksCache};
 
     const WEBHOOK: Webhook = Webhook {
         id: Id::new(1),
@@ -206,6 +256,18 @@ mod tests {
         user: None,
     };
 
+    #[allow(clippy::unwrap_used)]
+    async fn mock_update(cache: &WebhooksCache, event: &Event) {
+        cache
+            .update(
+                event,
+                &Client::builder().build(),
+                PermissionsSource::Request,
+            )
+            .await
+            .unwrap();
+    }
+
     #[test]
     fn get() {
         let cache = WebhooksCache::new();
@@ -216,55 +278,89 @@ mod tests {
         assert_eq!(cache.get(Id::new(1)).as_deref(), Some(&WEBHOOK));
     }
 
-    #[test]
-    fn update() {
+    #[tokio::test]
+    async fn update() {
         let cache = WebhooksCache::new();
-        cache.0.insert(Id::new(1), WEBHOOK);
-        cache.0.insert(Id::new(2), WEBHOOK);
 
-        cache.update(&Event::GuildDelete(GuildDelete {
-            id: Id::new(11),
-            unavailable: false,
-        }));
+        cache.0.insert(Id::new(1), WEBHOOK);
+        mock_update(
+            &cache,
+            &Event::GuildDelete(GuildDelete {
+                id: Id::new(11),
+                unavailable: false,
+            }),
+        )
+        .await;
         assert_eq!(cache.get(Id::new(1)).as_deref(), Some(&WEBHOOK));
 
-        cache.update(&Event::GuildDelete(GuildDelete {
-            id: Id::new(10),
-            unavailable: false,
-        }));
+        cache.0.insert(Id::new(2), WEBHOOK);
+        mock_update(
+            &cache,
+            &Event::GuildDelete(GuildDelete {
+                id: Id::new(10),
+                unavailable: false,
+            }),
+        )
+        .await;
         assert!(cache.get(Id::new(1)).is_none());
         assert!(cache.get(Id::new(2)).is_none());
 
         cache.0.insert(Id::new(3), WEBHOOK);
-        cache.update(&Event::ChannelDelete(Box::new(ChannelDelete(Channel {
-            id: Id::new(3),
-            guild_id: Some(Id::new(10)),
-            kind: ChannelType::GuildText,
-            application_id: None,
-            bitrate: None,
-            default_auto_archive_duration: None,
-            icon: None,
-            invitable: None,
-            last_message_id: None,
-            last_pin_timestamp: None,
-            member: None,
-            member_count: None,
-            message_count: None,
-            name: None,
-            newly_created: None,
-            nsfw: None,
-            owner_id: None,
-            parent_id: None,
-            permission_overwrites: None,
-            position: None,
-            rate_limit_per_user: None,
-            recipients: None,
-            rtc_region: None,
-            thread_metadata: None,
-            topic: None,
-            user_limit: None,
-            video_quality_mode: None,
-        }))));
+        mock_update(
+            &cache,
+            &Event::ChannelDelete(Box::new(ChannelDelete(Channel {
+                id: Id::new(3),
+                guild_id: Some(Id::new(10)),
+                kind: ChannelType::GuildText,
+                application_id: None,
+                bitrate: None,
+                default_auto_archive_duration: None,
+                icon: None,
+                invitable: None,
+                last_message_id: None,
+                last_pin_timestamp: None,
+                member: None,
+                member_count: None,
+                message_count: None,
+                name: None,
+                newly_created: None,
+                nsfw: None,
+                owner_id: None,
+                parent_id: None,
+                permission_overwrites: None,
+                position: None,
+                rate_limit_per_user: None,
+                recipients: None,
+                rtc_region: None,
+                thread_metadata: None,
+                topic: None,
+                user_limit: None,
+                video_quality_mode: None,
+            }))),
+        )
+        .await;
         assert!(cache.get(Id::new(3)).is_none());
+
+        cache.0.insert(Id::new(4), WEBHOOK);
+        mock_update(
+            &cache,
+            &Event::WebhooksUpdate(WebhooksUpdate {
+                channel_id: Id::new(12),
+                guild_id: Id::new(10),
+            }),
+        )
+        .await;
+        assert_eq!(cache.get(Id::new(4)).as_deref(), Some(&WEBHOOK));
+
+        cache.0.insert(Id::new(5), WEBHOOK);
+        mock_update(
+            &cache,
+            &Event::WebhooksUpdate(WebhooksUpdate {
+                channel_id: Id::new(5),
+                guild_id: Id::new(10),
+            }),
+        )
+        .await;
+        assert!(cache.get(Id::new(5)).is_none());
     }
 }
