@@ -519,7 +519,8 @@ mod tests {
             .unwrap();
         let request_b = http
             .execute_webhook(Id::new(1), "a")
-            .username("nick").unwrap()
+            .username("nick")
+            .unwrap()
             .avatar_url(
                 "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
                 a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
@@ -548,7 +549,8 @@ mod tests {
             .unwrap();
         let request_b = http
             .execute_webhook(Id::new(1), "a")
-            .username("nick").unwrap()
+            .username("nick")
+            .unwrap()
             .avatar_url(
                 "https://cdn.discordapp.com/guilds/1/users/2/avatars/\
                 a_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png",
