@@ -8,6 +8,7 @@ Refer to the docs for more
 
 ## Features
 - Caching webhooks
+- Handling executing webhooks in threads easier
 
 ## Contributing
 Contributions or even opening issues are very welcomed
