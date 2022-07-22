@@ -35,7 +35,7 @@ pub enum Error {
     CachePermissions(#[from] twilight_cache_inmemory::permission::ChannelError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Specify how permissions are handled on [`WebhooksCache::update`]
 pub enum PermissionsSource<'cache> {
     /// Use the given permissions
